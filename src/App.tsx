@@ -40,12 +40,12 @@ function PokerEvaluator() {
 
     useEffect(() => {
         if (provider) {
-            const handleChainChanged = (newChainId) => {
+            const handleChainChanged = async (newChainId) => {
                 const chainIdNumber = parseInt(newChainId);
                 setChainId(chainIdNumber);
                 if (chainIdNumber === SEPOLIA_CHAIN_ID) {
                     setError('');
-                    connectWallet(); // Reconnect to update contracts with new chain
+                    await initializeContracts(); // Re-initialize contracts on correct network
                 }
             };
 
@@ -56,15 +56,56 @@ function PokerEvaluator() {
         }
     }, [provider]);
 
+    // Check for cached provider on component mount
+    useEffect(() => {
+        if (web3Modal.cachedProvider) {
+            connectWallet();
+        }
+    }, []);
+
+    async function initializeContracts() {
+        if (!provider) {
+            setError('Provider not initialized');
+            return;
+        }
+
+        try {
+            const signer = provider.getSigner();
+            const evaluator = new ethers.Contract(
+                EVALUATOR_ADDRESS,
+                EVALUATOR_ABI,
+                signer
+            );
+
+            const test = new ethers.Contract(
+                TEST_ADDRESS,
+                TEST_ABI,
+                signer
+            );
+
+            setEvaluatorContract(evaluator);
+            setTestContract(test);
+            setError('');
+        } catch (error) {
+            console.error("Failed to initialize contracts:", error);
+            setError('Failed to initialize contracts');
+        }
+    }
+
     async function switchNetwork() {
         try {
+            setLoading(true);
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: '0xaa36a7' }], // Sepolia chainId in hex
             });
+            // After switching, reinitialize the connection
+            await connectWallet();
+            setLoading(false);
         } catch (error) {
             console.error('Failed to switch network:', error);
             setError('Failed to switch network. Please try manually.');
+            setLoading(false);
         }
     }
 
@@ -90,20 +131,7 @@ function PokerEvaluator() {
                 return;
             }
 
-            const evaluator = new ethers.Contract(
-                EVALUATOR_ADDRESS,
-                EVALUATOR_ABI,
-                signer
-            );
-
-            const test = new ethers.Contract(
-                TEST_ADDRESS,
-                TEST_ABI,
-                signer
-            );
-
-            setEvaluatorContract(evaluator);
-            setTestContract(test);
+            await initializeContracts();
 
             instance.on("accountsChanged", (accounts) => {
                 if (accounts.length === 0) {
@@ -147,6 +175,12 @@ function PokerEvaluator() {
     async function evaluateHands() {
         if (!testContract) {
             setError('Please connect wallet first');
+            return;
+        }
+
+        // Check if we're on the correct network before proceeding
+        if (chainId !== SEPOLIA_CHAIN_ID) {
+            setError('Please switch to Sepolia network');
             return;
         }
     
