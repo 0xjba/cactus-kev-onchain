@@ -1,15 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import './library.sol'; // Import the library
-
 /**
  * @title HandEvaluator
  * @dev This contract evaluates Texas Hold'em hands by determining the best 5-card
  * combination from a player's 2 hole cards and 5 community cards.
  */
 contract HandEvaluator {
-    using PokerConstants for uint8;
+    // Constants for card ranks
+    uint8 public constant RANK_2 = 0;
+    uint8 public constant RANK_3 = 1;
+    uint8 public constant RANK_4 = 2;
+    uint8 public constant RANK_5 = 3;
+    uint8 public constant RANK_6 = 4;
+    uint8 public constant RANK_7 = 5;
+    uint8 public constant RANK_8 = 6;
+    uint8 public constant RANK_9 = 7;
+    uint8 public constant RANK_T = 8;
+    uint8 public constant RANK_J = 9;
+    uint8 public constant RANK_Q = 10;
+    uint8 public constant RANK_K = 11;
+    uint8 public constant RANK_A = 12;
+    
+    // Constants for card suits
+    uint8 public constant SUIT_CLUBS = 0;
+    uint8 public constant SUIT_DIAMONDS = 1;
+    uint8 public constant SUIT_HEARTS = 2;
+    uint8 public constant SUIT_SPADES = 3;
     
     /// @dev Represents the 52-card deck.
     uint8[52] public DECK;
@@ -44,6 +61,24 @@ contract HandEvaluator {
             uint8 suit = i / 13;
             DECK[i] = (suit << 4) | rank;
         }
+    }
+
+    /**
+     * @dev Gets the rank of a card (0-12, representing 2-A)
+     * @param card The card value
+     * @return The rank value (0-12)
+     */
+    function getRank(uint8 card) public pure returns (uint8) {
+        return card & 0x0F;
+    }
+
+    /**
+     * @dev Gets the suit of a card (0-3, representing clubs, diamonds, hearts, spades)
+     * @param card The card value
+     * @return The suit value (0-3)
+     */
+    function getSuit(uint8 card) public pure returns (uint8) {
+        return (card >> 4) & 0x03;
     }
 
     /**
