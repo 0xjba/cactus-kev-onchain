@@ -41,11 +41,21 @@ function PokerEvaluator() {
     useEffect(() => {
         if (provider) {
             const handleChainChanged = async (newChainId) => {
-                const chainIdNumber = parseInt(newChainId);
+                const chainIdNumber = parseInt(newChainId, 16);
                 setChainId(chainIdNumber);
+                
+                // Clear existing contracts
+                setTestContract(null);
+                setEvaluatorContract(null);
+
                 if (chainIdNumber === SEPOLIA_CHAIN_ID) {
                     setError('');
-                    await initializeContracts(); // Re-initialize contracts on correct network
+                    // Reinitialize with fresh provider
+                    const web3Provider = new ethers.providers.Web3Provider(provider.provider);
+                    setProvider(web3Provider);
+                    await initializeContracts(web3Provider);
+                } else {
+                    setError('Please switch to Sepolia network');
                 }
             };
 
@@ -63,14 +73,20 @@ function PokerEvaluator() {
         }
     }, []);
 
-    async function initializeContracts() {
-        if (!provider) {
+    async function initializeContracts(currentProvider = provider) {
+        if (!currentProvider) {
             setError('Provider not initialized');
             return;
         }
 
         try {
-            const signer = provider.getSigner();
+            const network = await currentProvider.getNetwork();
+            if (network.chainId !== SEPOLIA_CHAIN_ID) {
+                setError('Please switch to Sepolia network');
+                return;
+            }
+
+            const signer = currentProvider.getSigner();
             const evaluator = new ethers.Contract(
                 EVALUATOR_ADDRESS,
                 EVALUATOR_ABI,
@@ -99,8 +115,19 @@ function PokerEvaluator() {
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: '0xaa36a7' }], // Sepolia chainId in hex
             });
-            // After switching, reinitialize the connection
-            await connectWallet();
+            
+            // Create fresh provider instance after network switch
+            const instance = await web3Modal.connect();
+            const web3Provider = new ethers.providers.Web3Provider(instance);
+            setProvider(web3Provider);
+            
+            const network = await web3Provider.getNetwork();
+            setChainId(network.chainId);
+            
+            if (network.chainId === SEPOLIA_CHAIN_ID) {
+                await initializeContracts(web3Provider);
+            }
+            
             setLoading(false);
         } catch (error) {
             console.error('Failed to switch network:', error);
@@ -131,7 +158,7 @@ function PokerEvaluator() {
                 return;
             }
 
-            await initializeContracts();
+            await initializeContracts(web3Provider);
 
             instance.on("accountsChanged", (accounts) => {
                 if (accounts.length === 0) {
@@ -178,13 +205,22 @@ function PokerEvaluator() {
             return;
         }
 
-        // Check if we're on the correct network before proceeding
-        if (chainId !== SEPOLIA_CHAIN_ID) {
-            setError('Please switch to Sepolia network');
-            return;
-        }
-    
+        // Verify network and refresh provider if needed
         try {
+            const network = await provider.getNetwork();
+            if (network.chainId !== SEPOLIA_CHAIN_ID) {
+                setError('Please switch to Sepolia network');
+                return;
+            }
+
+            // Refresh the contract instance with current provider
+            const signer = provider.getSigner();
+            const freshContract = new ethers.Contract(
+                TEST_ADDRESS,
+                TEST_ABI,
+                signer
+            );
+    
             setLoading(true);
             setError('');
             setResult('');
@@ -198,7 +234,7 @@ function PokerEvaluator() {
                 throw new Error('Please select all cards first');
             }
     
-            const result = await testContract.callStatic.compareHoldemHands(
+            const result = await freshContract.callStatic.compareHoldemHands(
                 hand1Numbers,
                 hand2Numbers,
                 communityNumbers
